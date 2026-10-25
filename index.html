@@ -702,7 +702,7 @@ keyDrop.addEventListener('drop', (e) => {
 });
 $('btnCreateKey').addEventListener('click', () => {
   const made = csMakeKeyFile($('keyLabelInput').value.trim());
-  const url = URL.createObjectURL(new Blob([made.json], { type: 'application/json' }));
+  const url = URL.createObjectURL(new Blob([made.json], { type: 'application/octet-stream' }));
   const a = document.createElement('a');
   a.href = url;
   a.download = 'chunksend-key.cskey';
