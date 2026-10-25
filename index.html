@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>ChunkSend — send files device to device</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #111; color: #eee;
+    font-family: system-ui, -apple-system, sans-serif; font-size: 22px;
+    display: flex; flex-direction: column; align-items: center; padding: 24px 16px 48px;
+  }
+  h1 { font-size: 46px; margin: 8px 0 4px; }
+  h2 { font-size: 32px; margin: 28px 0 10px; width: 100%; max-width: 720px; }
+  p.sub { color: #aaa; margin: 0 0 24px; text-align: center; max-width: 640px; }
+  .col { width: 100%; max-width: 720px; display: flex; flex-direction: column; align-items: stretch; }
+  .modes { display: flex; gap: 12px; width: 100%; max-width: 720px; margin-bottom: 20px; }
+  button, .btn {
+    font-size: 24px; font-weight: 700; padding: 16px 22px; border-radius: 14px;
+    border: 2px solid #444; background: #2a6fd6; color: #fff; cursor: pointer;
+    text-align: center; display: inline-block;
+  }
+  button:active, .btn:active { background: #1f5cb8; }
+  button:disabled { background: #333; color: #888; border-color: #333; cursor: default; }
+  button.ghost { background: #1c1c1c; color: #eee; }
+  button.mode { flex: 1; background: #1c1c1c; color: #bbb; font-size: 28px; padding: 20px; }
+  button.mode.on { background: #2a6fd6; color: #fff; border-color: #2a6fd6; }
+  button.danger { background: #8c2f2f; }
+  #sendDrop {
+    width: 100%; min-height: 180px; border: 3px dashed #555; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 28px; cursor: pointer; font-size: 26px; color: #bbb; position: relative; overflow: hidden;
+  }
+  #sendDrop.over { border-color: #4da3ff; background: #1a2a40; color: #fff; }
+  #sendDrop input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  label.btn { position: relative; overflow: hidden; margin-top: 12px; }
+  label.btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  textarea {
+    width: 100%; min-height: 110px; font-size: 17px; font-family: ui-monospace, monospace;
+    padding: 12px; border-radius: 12px; border: 2px solid #444; background: #1c1c1c; color: #eee;
+    word-break: break-all; margin: 8px 0;
+  }
+  .lbl { font-size: 22px; font-weight: 700; margin-top: 22px; }
+  .status { margin: 16px 0; min-height: 30px; color: #8fd08f; font-size: 23px; }
+  .status.err { color: #ff8080; font-weight: 700; }
+  .big { font-size: 54px; font-weight: 800; line-height: 1.1; margin: 6px 0; }
+  .mid { font-size: 26px; color: #ccc; }
+  progress { width: 100%; height: 30px; accent-color: #2a6fd6; }
+  ul.list { list-style: none; padding: 0; margin: 10px 0; width: 100%; }
+  ul.list li {
+    background: #1c1c1c; border: 1px solid #333; border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 10px; word-break: break-all;
+  }
+  ul.list .size { color: #999; font-size: 18px; white-space: nowrap; }
+  ul.list a.dl, ul.list button.dl {
+    background: #2a6fd6; color: #fff; text-decoration: none; font-weight: 700;
+    padding: 12px 18px; border-radius: 10px; font-size: 20px; display: inline-block; margin: 6px 8px 0 0;
+  }
+  .tid { font-family: ui-monospace, monospace; font-size: 18px; color: #8fd0ff; word-break: break-all; }
+  .state { font-weight: 800; }
+  .state.ok { color: #8fd08f; } .state.bad { color: #ff8080; } .state.mid { color: #ffd27d; }
+  .qrbox { display: flex; justify-content: center; margin: 10px 0; }
+  .qrbox svg, .qrbox img { background: #fff; padding: 10px; border-radius: 10px; max-width: 100%; height: auto; }
+  .hidden { display: none !important; }
+  .note { color: #777; font-size: 17px; margin-top: 30px; text-align: center; max-width: 640px; }
+  .spinner { display: inline-block; width: 22px; height: 22px; border: 3px solid #444;
+             border-top-color: #4da3ff; border-radius: 50%; animation: spin 0.8s linear infinite;
+             vertical-align: -4px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #keyDrop {
+    width: 100%; min-height: 130px; border: 3px dashed #555; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 22px; cursor: pointer; font-size: 24px; color: #bbb; position: relative; overflow: hidden;
+  }
+  #keyDrop.over { border-color: #4da3ff; background: #1a2a40; color: #fff; }
+  #keyDrop input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .circleId { font-family: ui-monospace, monospace; font-size: 40px; font-weight: 800;
+              color: #8fd0ff; letter-spacing: 2px; word-break: break-all; }
+  .keybar { width: 100%; max-width: 720px; background: #1c1c1c; border: 1px solid #333;
+            border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
+  input[type="checkbox"] { width: 26px; height: 26px; vertical-align: -5px; }
+  input[type="text"] {
+    width: 100%; font-size: 22px; padding: 12px; border-radius: 12px;
+    border: 2px solid #444; background: #1c1c1c; color: #eee; margin: 8px 0;
+  }
+</style>
+</head>
+<body>
+  <h1>ChunkSend</h1>
+  <p class="sub">Send files <b>directly device to device</b>. No server, no account —
+  files never pass through anywhere else. You pair the two devices with codes.</p>
+
+  <!-- ============================ KEY FILE GATE ============================ -->
+  <section class="col" id="keyGate">
+    <h2 style="margin-top:0;">🔑 First, load your key file</h2>
+    <p class="mid" style="text-align:left;">ChunkSend only works between devices that hold the
+    <b>same key file</b> — that file is what makes your circle yours. It stays on your
+    devices only and is never sent anywhere.</p>
+    <div id="keyDrop">
+      <span>Tap to pick your key file (.cskey),<br>or drop it here</span>
+      <input type="file" id="keyFileInput" accept=".cskey,application/json">
+    </div>
+    <div class="status" id="keyStatus"></div>
+    <div class="lbl">…or start a new circle</div>
+    <input type="text" id="keyLabelInput" placeholder="Name for this circle (optional, e.g. My devices)">
+    <button class="ghost" id="btnCreateKey">Create a key file</button>
+    <p class="mid">Creating one downloads a <b>chunksend-key.cskey</b> file and loads it here.
+    Keep it safe — load that same file on every device you want in this circle.</p>
+  </section>
+
+  <!-- ============================ KEY BAR (shown once a key is loaded) ============================ -->
+  <section class="col" id="howCirclesWork">
+    <h2 style="margin-top:0;">🛡️ How your circle stays yours</h2>
+    <p class="mid" style="text-align:left;">New here? <b>Create your key file above</b> — it is made
+    right here in this browser with its built-in random generator, then downloads straight to
+    you. This page has no server and no account, so your key is never sent, seen, or stored
+    by anyone — there is nothing on the other end to break into.</p>
+    <p class="mid" style="text-align:left;">Every key starts its <b>own circle</b>. Two people with
+    different keys cannot open each other's codes, cannot pass each other's key check, and
+    cannot touch each other's packages — the math keeps circles apart even though everyone
+    uses the same public page. Your files only ever travel directly between your own devices.</p>
+    <p class="mid" style="text-align:left;">One rule: <b>keep your key file private.</b> Anyone
+    holding it can join your circle — the same way anyone holding a house key can open the
+    door. If it ever leaks, create a fresh one and your old circle stops working.</p>
+  </section>
+  <div class="keybar hidden" id="keyBar">
+    <div>🔑 Your circle</div>
+    <div class="circleId" id="keyCircleId">—</div>
+    <div class="mid" id="keyLabelText"></div>
+    <div style="margin-top:10px;">
+      <label><input type="checkbox" id="chkRememberKey"> Remember on this device</label>
+    </div>
+    <button class="ghost" id="btnForgetKey" style="margin-top:10px;">Forget this key file</button>
+  </div>
+
+  <div class="modes hidden" id="modesBar">
+    <button class="mode on" id="btnModeSend">📤 Send</button>
+    <button class="mode" id="btnModeRecv">📥 Receive</button>
+  </div>
+
+  <!-- ============================ SEND ============================ -->
+  <section class="col hidden" id="sendPanel">
+    <div id="sendDrop">
+      <span id="sendDropText">Tap to pick files,<br>or drop files / a folder here</span>
+      <input type="file" id="sendFilesInput" multiple>
+    </div>
+    <label class="btn ghost">📁 …or pick a whole folder
+      <input type="file" id="sendFolderInput" webkitdirectory>
+    </label>
+
+    <ul class="list" id="sendFileList"></ul>
+
+    <div class="lbl">Step 1 — pack the files</div>
+    <button id="btnPack" disabled>Pack files &amp; make the package</button>
+    <div class="status" id="sendPackStatus"></div>
+    <progress id="sendPackBar" class="hidden" value="0" max="1"></progress>
+
+    <div id="sendCodeBox" class="hidden">
+      <div class="lbl">Step 2 — give this code to the receiver</div>
+      <textarea id="sendOfferCode" readonly></textarea>
+      <button class="ghost" id="btnCopyOffer">Copy the code</button>
+      <div class="qrbox" id="sendOfferQR"></div>
+
+      <div class="lbl">Step 3 — paste the receiver's answer code here</div>
+      <textarea id="sendAnswerCode" placeholder="Paste the answer code (starts with CS2.)"></textarea>
+      <button id="btnConnect">Connect &amp; send</button>
+    </div>
+
+    <div class="status" id="sendStatus"></div>
+    <div id="sendProgress" class="hidden">
+      <div class="big" id="sendPartsBig">0 / 0 parts</div>
+      <div class="mid" id="sendSpeed">—</div>
+      <progress id="sendBar" value="0" max="1"></progress>
+    </div>
+    <button class="danger hidden" id="btnSendCancel">Cancel send</button>
+  </section>
+
+  <!-- ============================ RECEIVE ============================ -->
+  <section class="col hidden" id="recvPanel">
+    <div class="lbl">Step 1 — paste the sender's code</div>
+    <textarea id="recvOfferCode" placeholder="Paste the sender's code (starts with CS2.)"></textarea>
+    <button id="btnMakeAnswer">Make my answer code</button>
+
+    <div id="recvCodeBox" class="hidden">
+      <div class="lbl">Step 2 — give this answer code back to the sender</div>
+      <textarea id="recvAnswerCode" readonly></textarea>
+      <button class="ghost" id="btnCopyAnswer">Copy the code</button>
+      <div class="qrbox" id="recvAnswerQR"></div>
+      <p class="mid">Then wait here — the files will arrive on this page.</p>
+    </div>
+
+    <div class="status" id="recvStatus"></div>
+    <div id="recvProgress" class="hidden">
+      <div class="big" id="recvPartsBig">0 / 0 parts</div>
+      <div class="mid" id="recvSpeed">—</div>
+      <progress id="recvBar" value="0" max="1"></progress>
+    </div>
+    <button class="danger hidden" id="btnRecvCancel">Cancel receive</button>
+  </section>
+
+  <!-- ============================ PACKAGES ============================ -->
+  <h2>Received packages</h2>
+  <ul class="list" id="packageList" style="max-width:720px;">
+    <li id="noPackages">Nothing received yet. Packages are kept separate — a new
+    package never replaces an old one.</li>
+  </ul>
+
+  <p class="note">How it works: the sender's files are split into numbered packages,
+  the package list is sealed so any tampering makes it fail closed, and every piece
+  is checked on arrival. Only devices holding the same key file can exchange packages —
+  guard that file like a password.</p>
+
+<!-- QR code renderer (small library, same jsdelivr CDN pattern as un7z). If it
+     fails to load, codes still work by copy/paste — QR is only a shortcut. -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+
+<script id="cs-core">
+'use strict';
+/* =====================================================================
+   ChunkSend core logic — pure functions, no DOM. Shared by the page UI
+   below and by the Node test (test_core.mjs extracts this block).
+   Implements PROTOCOL.md v1 exactly:
+   - tid = UTC timestamp + "-" + 6 base32 chars from 4 random bytes
+   - parts of 16 MiB, frames <= 16 KiB with an 8-byte big-endian header
+   - manifestKey = HKDF-SHA256(sessionKey, salt "ChunkSend/v1", info tid)
+   - ticket = base64(nonce || AES-256-GCM(manifest JSON))
+   - pairing code = "CS1." + base64url(gzip(JSON))   [superseded by section 13]
+   Amendment v2 (PROTOCOL.md sections 9-12) supersedes the key handling:
+   - a circle key file (*.cskey) holds the master key; the page ships with none
+   - sessionKey = HKDF-SHA256(masterKey, salt tid, info "ChunkSend/v1 session")
+   - offer codes are v2 and carry {sdp, tid, circle} — NO key material
+   - the receiver proves membership first: HMAC-SHA256(sessionKey,
+     "ChunkSend/v1 hello") over ctl, verified by the sender before the
+     sealed ticket is sent
+   Hardening (PROTOCOL.md section 13) supersedes the code format:
+   - codes are sealed: codeKey = HKDF-SHA256(masterKey, salt "ChunkSend/v1",
+     info "ChunkSend/v1 code"); code = "CS2." + base64url(nonce ||
+     AES-256-GCM(payload JSON)). A code leaks nothing without the key file,
+     and opening one with the wrong key file fails closed.
+   - offer codes expire: the tid stamp must be <= 24h old and <= 1h ahead
+   ===================================================================== */
+var CS_PART_SIZE = 16777216;          // 16 MiB
+var CS_FRAME_PAYLOAD = 16384;         // 16 KiB
+var CS_CODE_PREFIX = 'CS2.';
+var CS_HKDF_SALT = 'ChunkSend/v1';
+var CS_CODE_INFO = 'ChunkSend/v1 code';
+var CS_OFFER_MAX_AGE_MS = 24 * 3600 * 1000;    // offer codes die after 24h (section 13)
+var CS_OFFER_MAX_SKEW_MS = 3600 * 1000;        // ...and at most 1h in the future
+var CS_SESSION_INFO = 'ChunkSend/v1 session';
+var CS_HELLO_MSG = 'ChunkSend/v1 hello';
+var CS_ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+];
+
+function csRandomBytes(n) {
+  var b = new Uint8Array(n);
+  crypto.getRandomValues(b);
+  return b;
+}
+function csMakeSessionKey() { return csRandomBytes(32); }
+function csEnc(str) { return new TextEncoder().encode(str); }
+function csDec(bytes) { return new TextDecoder().decode(bytes); }
+function csHex(bytes) {
+  var s = '';
+  for (var i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0');
+  return s;
+}
+
+/* --- base64 / base64url --- */
+function csB64Encode(bytes) {
+  var s = '', CH = 0x8000;
+  for (var i = 0; i < bytes.length; i += CH) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(s);
+}
+function csB64Decode(str) {
+  var s = atob(str), b = new Uint8Array(s.length);
+  for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return b;
+}
+function csB64UrlEncode(bytes) {
+  return csB64Encode(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function csB64UrlDecode(str) {
+  var s = String(str).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return csB64Decode(s);
+}
+
+/* --- transfer id (Sean's scheme: one timestamp per send + random tag) --- */
+var CS_B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function csBase32(bytes) {
+  var out = '', bits = 0, val = 0;
+  for (var i = 0; i < bytes.length; i++) {
+    val = ((val << 8) | bytes[i]) >>> 0; bits += 8;
+    while (bits >= 5) { bits -= 5; out += CS_B32[(val >>> bits) & 31]; }
+  }
+  if (bits > 0) out += CS_B32[(val << (5 - bits)) & 31];
+  return out;
+}
+function csFormatTid(date, rand4) {
+  function p(n, w) { return String(n).padStart(w, '0'); }
+  return date.getUTCFullYear() +
+    p(date.getUTCMonth() + 1, 2) + p(date.getUTCDate(), 2) + 'T' +
+    p(date.getUTCHours(), 2) + p(date.getUTCMinutes(), 2) + p(date.getUTCSeconds(), 2) +
+    'Z-' + csBase32(rand4).slice(0, 6);
+}
+function csMakeTid(now, rand4) {
+  return csFormatTid(now || new Date(), rand4 || csRandomBytes(4));
+}
+
+/* --- chunk planning (pure: sizes only, no file bytes) ---
+   metas: [{path, size}] -> { parts: [{i,path,offset,size}],
+                              files: [{path,size}] }
+   Files are sorted by path; part numbers are global and sequential. */
+function csPlanParts(metas) {
+  var sorted = metas.slice().sort(function (a, b) {
+    return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+  });
+  var parts = [], files = [], idx = 0;
+  for (var k = 0; k < sorted.length; k++) {
+    var f = sorted[k];
+    files.push({ path: f.path, size: f.size });
+    for (var off = 0; off < f.size; off += CS_PART_SIZE) {
+      parts.push({ i: idx++, path: f.path, offset: off, size: Math.min(CS_PART_SIZE, f.size - off) });
+    }
+  }
+  return { parts: parts, files: files };
+}
+
+/* --- hashing --- */
+async function csSha256Hex(bytes) {
+  var h = await crypto.subtle.digest('SHA-256', bytes);
+  return csHex(new Uint8Array(h));
+}
+
+/* --- manifest --- */
+function csBuildManifest(tid, created, name, planned, partHashes, fileHashes) {
+  var parts = planned.parts.map(function (p, k) {
+    return { i: p.i, path: p.path, offset: p.offset, size: p.size, sha256: partHashes[k] };
+  });
+  var files = planned.files.map(function (f, k) {
+    return { path: f.path, size: f.size, sha256: fileHashes[k] };
+  });
+  var totalSize = planned.files.reduce(function (a, f) { return a + f.size; }, 0);
+  return { v: 1, tid: tid, created: created, name: name, totalSize: totalSize, parts: parts, files: files };
+}
+
+/* --- the sealed ticket --- */
+async function csDeriveManifestKey(sessionKey, tid) {
+  var hkdfKey = await crypto.subtle.importKey('raw', sessionKey, 'HKDF', false, ['deriveBits']);
+  var bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: csEnc(CS_HKDF_SALT), info: csEnc(tid) },
+    hkdfKey, 256);
+  return crypto.subtle.importKey('raw', bits, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+async function csSealManifest(manifest, sessionKey) {
+  var key = await csDeriveManifestKey(sessionKey, manifest.tid);
+  var nonce = csRandomBytes(12);
+  var ct = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce }, key, csEnc(JSON.stringify(manifest))));
+  var out = new Uint8Array(nonce.length + ct.length);
+  out.set(nonce, 0); out.set(ct, nonce.length);
+  return csB64Encode(out);
+}
+/* Throws on ANY problem: bad seal, wrong key, tid mismatch. Fail closed. */
+async function csUnsealManifest(blobB64, sessionKey, expectTid) {
+  var raw = csB64Decode(blobB64);
+  if (raw.length < 12 + 16) throw new Error('sealed ticket is too short');
+  var key = await csDeriveManifestKey(sessionKey, expectTid);
+  var plain;
+  try {
+    plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: raw.subarray(0, 12) }, key, raw.subarray(12));
+  } catch (e) {
+    throw new Error('seal check failed — package rejected (tampered with, or wrong pairing code)');
+  }
+  var manifest = JSON.parse(csDec(new Uint8Array(plain)));
+  if (manifest.v !== 1) throw new Error('unsupported package version — package rejected');
+  if (manifest.tid !== expectTid) throw new Error('transfer id mismatch — package rejected');
+  return manifest;
+}
+
+/* --- circle key file (Amendment v2, section 9) ---
+   {"app":"ChunkSend","v":1,"circle":"<8 base32 chars>","label":<name>,
+    "created":<unix seconds>,"key":"<base64 of 32 random bytes>"}
+   Strict validation; throws with a plain-words reason on anything off. */
+function csParseKeyFile(text) {
+  var obj;
+  try { obj = JSON.parse(String(text)); }
+  catch (e) { throw new Error('That file is not a key file (it is not readable as JSON).'); }
+  if (!obj || typeof obj !== 'object') throw new Error('That file is not a key file.');
+  if (obj.app !== 'ChunkSend') throw new Error('That is not a ChunkSend key file.');
+  if (obj.v !== 1) throw new Error('Unsupported key file version.');
+  if (typeof obj.circle !== 'string' || !/^[A-Z2-7]{8}$/.test(obj.circle)) {
+    throw new Error('Key file has a bad circle id.');
+  }
+  if (typeof obj.key !== 'string' || !obj.key) throw new Error('Key file is missing its key.');
+  var key;
+  try { key = csB64Decode(obj.key); }
+  catch (e) { throw new Error('Key file key is not valid base64.'); }
+  if (key.length !== 32) throw new Error('Key file key must be 32 bytes (got ' + key.length + ').');
+  return {
+    circle: obj.circle,
+    label: typeof obj.label === 'string' ? obj.label : '',
+    created: typeof obj.created === 'number' ? obj.created : 0,
+    key: key
+  };
+}
+function csMakeKeyFile(label, nowSec) {
+  var key = csRandomBytes(32);
+  var circle = csBase32(csRandomBytes(5));   // 5 bytes = exactly 8 base32 chars
+  var obj = {
+    app: 'ChunkSend', v: 1, circle: circle,
+    label: label || '', created: nowSec || Math.floor(Date.now() / 1000),
+    key: csB64Encode(key)
+  };
+  return {
+    json: JSON.stringify(obj, null, 2),
+    parsed: { circle: circle, label: obj.label, created: obj.created, key: key }
+  };
+}
+
+/* --- session key from the circle master key (Amendment v2, section 10) ---
+   Both sides derive the same key from (master key, tid); a code alone,
+   without the key file, yields nothing. */
+async function csDeriveSessionKey(masterKey, tid) {
+  var hkdfKey = await crypto.subtle.importKey('raw', masterKey, 'HKDF', false, ['deriveBits']);
+  var bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: csEnc(tid), info: csEnc(CS_SESSION_INFO) },
+    hkdfKey, 256);
+  return new Uint8Array(bits);
+}
+
+/* --- membership proof (Amendment v2, section 11) --- */
+async function csHelloProof(sessionKey) {
+  var k = await crypto.subtle.importKey('raw', sessionKey,
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  var sig = await crypto.subtle.sign('HMAC', k, csEnc(CS_HELLO_MSG));
+  return csB64Encode(new Uint8Array(sig));
+}
+async function csVerifyHelloProof(sessionKey, proofB64) {
+  try {
+    var sig = csB64Decode(proofB64);
+    var k = await crypto.subtle.importKey('raw', sessionKey,
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    return await crypto.subtle.verify('HMAC', k, sig, csEnc(CS_HELLO_MSG));
+  } catch (e) { return false; }
+}
+
+/* --- pairing codes: sealed with the circle key (section 13) ---
+   codeKey = HKDF-SHA256(masterKey, salt "ChunkSend/v1", info "ChunkSend/v1 code")
+   code text = "CS2." + base64url(nonce || AES-256-GCM(payload JSON))
+   The payload is no longer readable JSON and gzip is gone: without the key
+   file a code reveals nothing (no SDP, no tid, no circle). */
+var CS_CODE_WONT_OPEN = "this code won't open — the wrong key file is loaded, or the code is damaged";
+async function csDeriveCodeKeyBits(masterKey) {
+  var hkdfKey = await crypto.subtle.importKey('raw', masterKey, 'HKDF', false, ['deriveBits']);
+  return crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: csEnc(CS_HKDF_SALT), info: csEnc(CS_CODE_INFO) },
+    hkdfKey, 256);
+}
+async function csEncodeCode(obj, masterKey) {
+  var bits = await csDeriveCodeKeyBits(masterKey);
+  var key = await crypto.subtle.importKey('raw', bits, { name: 'AES-GCM' }, false, ['encrypt']);
+  var nonce = csRandomBytes(12);
+  var ct = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce }, key, csEnc(JSON.stringify(obj))));
+  var out = new Uint8Array(nonce.length + ct.length);
+  out.set(nonce, 0); out.set(ct, nonce.length);
+  return CS_CODE_PREFIX + csB64UrlEncode(out);
+}
+/* Throws on ANY problem. A wrong prefix (incl. old CS1. codes) gets its own
+   message; everything else — wrong key file, damaged body, bad JSON — fails
+   closed with CS_CODE_WONT_OPEN so nothing leaks about which part failed. */
+async function csDecodeCode(text, masterKey) {
+  var t = String(text || '').trim();
+  if (t.indexOf(CS_CODE_PREFIX) !== 0) {
+    throw new Error('That is not a ChunkSend code — it must start with CS2.');
+  }
+  var raw, bits, key, plain;
+  try {
+    raw = csB64UrlDecode(t.slice(CS_CODE_PREFIX.length));
+    if (raw.length < 12 + 16) throw new Error('code too short');
+    bits = await csDeriveCodeKeyBits(masterKey);
+    key = await crypto.subtle.importKey('raw', bits, { name: 'AES-GCM' }, false, ['decrypt']);
+    plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: raw.subarray(0, 12) }, key, raw.subarray(12));
+  } catch (e) {
+    throw new Error(CS_CODE_WONT_OPEN);
+  }
+  var obj;
+  try { obj = JSON.parse(csDec(new Uint8Array(plain))); }
+  catch (e) { throw new Error(CS_CODE_WONT_OPEN); }
+  if (!obj || obj.v !== 2) throw new Error('Unsupported code version.');
+  return obj;
+}
+
+/* --- offer expiry (section 13): the tid carries the send's stamp ---
+   tid = yyyyMMdd'T'HHmmss'Z' + '-' + suffix (UTC). Returns null when the
+   offer is fresh, or the rejection message when it is too old / too far
+   ahead / the stamp cannot be read at all (fail closed). */
+function csTidTimestampMs(tid) {
+  var m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-/.exec(String(tid || ''));
+  if (!m) return null;
+  var y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5], s = +m[6];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null;
+  var ms = Date.UTC(y, mo - 1, d, h, mi, s);
+  /* Round-trip check: Date.UTC silently normalizes out-of-range fields
+     (month 13 -> next January, Feb 30 -> Mar 2, hour 25 -> next day), so a
+     malformed stamp must not be read as a shifted real date. Fail closed. */
+  var chk = new Date(ms);
+  if (chk.getUTCFullYear() !== y || chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d ||
+      chk.getUTCHours() !== h || chk.getUTCMinutes() !== mi || chk.getUTCSeconds() !== s) return null;
+  return ms;
+}
+function csOfferExpiryError(tid, nowMs) {
+  var stamp = csTidTimestampMs(tid);
+  if (stamp === null) return 'That offer code has expired — ask the sender to make a fresh one.';
+  var now = (typeof nowMs === 'number') ? nowMs : Date.now();
+  if (now - stamp > CS_OFFER_MAX_AGE_MS) return 'That offer code has expired — ask the sender to make a fresh one.';
+  if (stamp - now > CS_OFFER_MAX_SKEW_MS) return 'That offer code has expired — ask the sender to make a fresh one.';
+  return null;
+}
+
+/* --- wire frames: 8-byte header (u32be part index, u32be payload length) --- */
+function csEncodeFrame(partIndex, payload) {
+  var out = new Uint8Array(8 + payload.length);
+  var dv = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  dv.setUint32(0, partIndex, false);
+  dv.setUint32(4, payload.length, false);
+  out.set(payload, 8);
+  return out;
+}
+function csDecodeFrame(buf) {
+  var bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  if (bytes.length < 8) throw new Error('frame too short');
+  var dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  var i = dv.getUint32(0, false), len = dv.getUint32(4, false);
+  if (bytes.length < 8 + len) throw new Error('frame truncated');
+  return { i: i, len: len, payload: bytes.subarray(8, 8 + len) };
+}
+function csChannelForPart(i) { return i % 4; }
+</script>
+
+<script>
+'use strict';
+/* ================= ChunkSend web UI (DOM + WebRTC) ================= */
+const $ = (id) => document.getElementById(id);
+
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+function fmtSpeed(bps) {
+  if (!bps || bps < 1) return '—';
+  return fmtSize(Math.round(bps)) + '/s';
+}
+function setStatus(el, html, isErr) {
+  el.innerHTML = html;
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function renderQR(box, text) {
+  box.innerHTML = '';
+  try {
+    if (typeof qrcode === 'undefined') return;         // library not loaded — copy/paste still works
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 10, scalable: true });
+  } catch (e) {
+    box.innerHTML = '<p class="mid">Code is too long for a QR picture — use copy &amp; paste.</p>';
+  }
+}
+async function copyText(textarea, btn) {
+  try { await navigator.clipboard.writeText(textarea.value); }
+  catch (e) { textarea.select(); document.execCommand('copy'); }
+  const old = btn.textContent;
+  btn.textContent = 'Copied ✓';
+  setTimeout(() => { btn.textContent = old; }, 1500);
+}
+function waitIceComplete(pc) {
+  if (pc.iceGatheringState === 'complete') return Promise.resolve();
+  return new Promise((resolve) => {
+    const onChange = () => {
+      if (pc.iceGatheringState === 'complete') {
+        pc.removeEventListener('icegatheringstatechange', onChange);
+        resolve();
+      }
+    };
+    pc.addEventListener('icegatheringstatechange', onChange);
+  });
+}
+/* Small throughput meter: call sample(bytes) as bytes are acked/received. */
+function makeMeter(bigEl, speedEl, barEl) {
+  let lastBytes = 0, lastTime = performance.now(), shown = 0;
+  const timer = setInterval(() => {
+    const now = performance.now();
+    const dt = (now - lastTime) / 1000;
+    if (dt > 0) shown = (meterBytes - lastBytes) / dt;
+    lastBytes = meterBytes; lastTime = now;
+    speedEl.textContent = fmtSpeed(shown);
+  }, 700);
+  let meterBytes = 0;
+  return {
+    add(n) { meterBytes += n; },
+    get bytes() { return meterBytes; },
+    stop() { clearInterval(timer); }
+  };
+}
+
+/* ============================ Key file gate (Amendment v2) ============================ */
+/* loadedKey: { circle, label, created, key:Uint8Array, jsonText }.
+   The key lives in page memory only, unless the user explicitly opts in to
+   remembering it on this device (localStorage). It is NEVER transmitted. */
+const btnModeSend = $('btnModeSend'), btnModeRecv = $('btnModeRecv');
+let loadedKey = null;
+let currentMode = 'send';
+const LS_KEY = 'chunksend.keyfile.v1';
+function showMode() {
+  const unlocked = !!loadedKey;
+  $('modesBar').classList.toggle('hidden', !unlocked);
+  $('sendPanel').classList.toggle('hidden', !(unlocked && currentMode === 'send'));
+  $('recvPanel').classList.toggle('hidden', !(unlocked && currentMode === 'recv'));
+  btnModeSend.classList.toggle('on', currentMode === 'send');
+  btnModeRecv.classList.toggle('on', currentMode === 'recv');
+}
+btnModeSend.addEventListener('click', () => { currentMode = 'send'; showMode(); });
+btnModeRecv.addEventListener('click', () => { currentMode = 'recv'; showMode(); });
+
+function unlockWith(parsed, jsonText) {
+  loadedKey = { circle: parsed.circle, label: parsed.label, created: parsed.created, key: parsed.key, jsonText };
+  $('keyGate').classList.add('hidden');
+  $('keyBar').classList.remove('hidden');
+  $('keyCircleId').textContent = parsed.circle;
+  $('keyLabelText').textContent = parsed.label || '';
+  if ($('chkRememberKey').checked) {
+    try { localStorage.setItem(LS_KEY, jsonText); } catch (e) {}
+  }
+  showMode();
+}
+function forgetKey() {
+  loadedKey = null;
+  try { localStorage.removeItem(LS_KEY); } catch (e) {}
+  $('chkRememberKey').checked = false;
+  try { if (sendConn) { sendConn.pc.close(); sendConn = null; } } catch (e) {}
+  try { if (recvConn) { recvConn.pc.close(); recvConn = null; } } catch (e) {}
+  /* The connections are dead, so their UI must not linger: a stale offer or
+     answer code on screen after forgetting looks usable but can never
+     connect (and, after loading a different key file, would not even open).
+     Hide the code boxes, progress, and cancel buttons, and clear the codes. */
+  $('sendCodeBox').classList.add('hidden');
+  $('recvCodeBox').classList.add('hidden');
+  $('sendProgress').classList.add('hidden');
+  $('recvProgress').classList.add('hidden');
+  $('btnSendCancel').classList.add('hidden');
+  $('btnRecvCancel').classList.add('hidden');
+  $('sendOfferCode').value = '';
+  $('sendAnswerCode').value = '';
+  $('recvOfferCode').value = '';
+  $('recvAnswerCode').value = '';
+  $('keyBar').classList.add('hidden');
+  $('keyGate').classList.remove('hidden');
+  setStatus($('keyStatus'), 'Key file forgotten on this device. Load it again to keep going.');
+  showMode();
+}
+async function loadKeyFromFile(file) {
+  try {
+    const text = await file.text();
+    unlockWith(csParseKeyFile(text), text);
+  } catch (e) {
+    setStatus($('keyStatus'), '❌ ' + esc(e.message || String(e)), true);
+  }
+}
+$('keyFileInput').addEventListener('change', (e) => {
+  if (e.target.files[0]) loadKeyFromFile(e.target.files[0]);
+  e.target.value = '';
+});
+const keyDrop = $('keyDrop');
+['dragover', 'dragenter'].forEach((ev) => keyDrop.addEventListener(ev, (e) => {
+  e.preventDefault(); keyDrop.classList.add('over');
+}));
+['dragleave', 'drop'].forEach((ev) => keyDrop.addEventListener(ev, (e) => {
+  e.preventDefault(); keyDrop.classList.remove('over');
+}));
+keyDrop.addEventListener('drop', (e) => {
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) loadKeyFromFile(f);
+});
+$('btnCreateKey').addEventListener('click', () => {
+  const made = csMakeKeyFile($('keyLabelInput').value.trim());
+  const url = URL.createObjectURL(new Blob([made.json], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'chunksend-key.cskey';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  unlockWith(made.parsed, made.json);
+});
+$('btnForgetKey').addEventListener('click', forgetKey);
+$('chkRememberKey').addEventListener('change', (e) => {
+  try {
+    if (e.target.checked && loadedKey) localStorage.setItem(LS_KEY, loadedKey.jsonText);
+    else localStorage.removeItem(LS_KEY);
+  } catch (err) {}
+});
+/* Restore a remembered key — only ever present if the user opted in. */
+(function restoreKey() {
+  let text = null;
+  try { text = localStorage.getItem(LS_KEY); } catch (e) {}
+  if (!text) return;
+  try {
+    const parsed = csParseKeyFile(text);
+    $('chkRememberKey').checked = true;
+    unlockWith(parsed, text);
+  } catch (e) {
+    try { localStorage.removeItem(LS_KEY); } catch (err) {}
+  }
+})();
+showMode();
+
+/* ============================ SEND: picking ============================ */
+/* sendFiles: Map path -> File (paths keep folder structure). */
+const sendFiles = new Map();
+function refreshSendList() {
+  const ul = $('sendFileList');
+  ul.innerHTML = '';
+  let total = 0;
+  for (const [path, f] of sendFiles) {
+    total += f.size;
+    const li = document.createElement('li');
+    li.innerHTML = esc(path) + ' <span class="size">' + fmtSize(f.size) + '</span>';
+    ul.appendChild(li);
+  }
+  $('btnPack').disabled = sendFiles.size === 0;
+  if (sendFiles.size) {
+    setStatus($('sendPackStatus'),
+      sendFiles.size + ' file' + (sendFiles.size === 1 ? '' : 's') + ', ' + fmtSize(total) + ' total.');
+  }
+}
+function addSendFile(path, file) { sendFiles.set(path, file); }
+$('sendFilesInput').addEventListener('change', (e) => {
+  for (const f of e.target.files) addSendFile(f.name, f);
+  e.target.value = '';
+  refreshSendList();
+});
+$('sendFolderInput').addEventListener('change', (e) => {
+  for (const f of e.target.files) addSendFile(f.webkitRelativePath || f.name, f);
+  e.target.value = '';
+  refreshSendList();
+});
+const sendDrop = $('sendDrop');
+['dragover', 'dragenter'].forEach((ev) => sendDrop.addEventListener(ev, (e) => {
+  e.preventDefault(); sendDrop.classList.add('over');
+}));
+['dragleave', 'drop'].forEach((ev) => sendDrop.addEventListener(ev, (e) => {
+  e.preventDefault(); sendDrop.classList.remove('over');
+}));
+sendDrop.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  const items = e.dataTransfer.items;
+  const walks = [];
+  if (items && items.length && items[0].webkitGetAsEntry) {
+    const entries = [];
+    for (const it of items) { const en = it.webkitGetAsEntry(); if (en) entries.push(en); }
+    const walk = (entry, prefix) => new Promise((resolve) => {
+      if (entry.isFile) {
+        entry.file((f) => { addSendFile(prefix + entry.name, f); resolve(); }, () => resolve());
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const readBatch = () => reader.readEntries(async (batch) => {
+          if (!batch.length) { resolve(); return; }
+          for (const child of batch) await walk(child, prefix + entry.name + '/');
+          readBatch();
+        }, () => resolve());
+        readBatch();
+      } else resolve();
+    });
+    for (const en of entries) walks.push(walk(en, ''));
+    await Promise.all(walks);
+  } else {
+    for (const f of e.dataTransfer.files) addSendFile(f.name, f);
+  }
+  refreshSendList();
+});
+
+/* ============================ SEND: packing ============================ */
+let sendPkg = null;   // { tid, sessionKey, manifest, planned, name }
+function guessPackageName() {
+  const paths = [...sendFiles.keys()];
+  if (paths.length === 1) return paths[0].split('/').pop();
+  const firstSegs = new Set(paths.map((p) => p.split('/')[0]));
+  if (paths.every((p) => p.includes('/')) && firstSegs.size === 1) return [...firstSegs][0];
+  return 'Files (' + paths.length + ')';
+}
+$('btnPack').addEventListener('click', async () => {
+  const btn = $('btnPack');
+  btn.disabled = true;
+  const bar = $('sendPackBar');
+  bar.classList.remove('hidden');
+  try {
+    if (!loadedKey) throw new Error('Load your key file first.');
+    const metas = [...sendFiles.entries()].map(([path, f]) => ({ path, size: f.size }));
+    const planned = csPlanParts(metas);
+    const totalParts = planned.parts.length;
+    setStatus($('sendPackStatus'),
+      '<span class="spinner"></span>Fingerprinting ' + totalParts + ' part' +
+      (totalParts === 1 ? '' : 's') + '…');
+    const partHashes = [], fileHashes = [];
+    for (let k = 0; k < planned.parts.length; k++) {
+      const p = planned.parts[k];
+      const file = sendFiles.get(p.path);
+      const buf = await file.slice(p.offset, p.offset + p.size).arrayBuffer();
+      partHashes.push(await csSha256Hex(new Uint8Array(buf)));
+      bar.value = (k + 1) / Math.max(1, totalParts);
+    }
+    /* whole-file fingerprints */
+    for (const fmeta of planned.files) {
+      const file = sendFiles.get(fmeta.path);
+      if (fmeta.size <= CS_PART_SIZE) {
+        const only = planned.parts.find((p) => p.path === fmeta.path);
+        fileHashes.push(only ? only.sha256 || partHashes[planned.parts.indexOf(only)] : await csSha256Hex(new Uint8Array(0)));
+      } else {
+        /* hash the whole file (streamed in part-sized reads) */
+        const whole = new Uint8Array(await file.arrayBuffer());
+        fileHashes.push(await csSha256Hex(whole));
+      }
+    }
+    const now = new Date();
+    const tid = csMakeTid(now);
+    const created = Math.floor(now.getTime() / 1000);
+    const name = guessPackageName();
+    const manifest = csBuildManifest(tid, created, name, planned, partHashes, fileHashes);
+    /* Amendment v2: the session key is derived from the circle key file and
+       this package's tid — it is never put in the pairing code. */
+    const sessionKey = await csDeriveSessionKey(loadedKey.key, tid);
+    sendPkg = { tid, sessionKey, manifest, planned, name };
+    setStatus($('sendPackStatus'),
+      'Package ready: <b>' + esc(name) + '</b> · ' + fmtSize(manifest.totalSize) +
+      ' · ' + totalParts + ' part' + (totalParts === 1 ? '' : 's') +
+      '<br>Package ID: <span class="tid">' + esc(tid) + '</span>');
+    $('sendCodeBox').classList.remove('hidden');
+    await makeOffer();
+  } catch (e) {
+    console.error(e);
+    setStatus($('sendPackStatus'), 'Packing failed: ' + esc(e.message || String(e)), true);
+  } finally {
+    bar.classList.add('hidden');
+    btn.disabled = false;
+  }
+});
+
+/* ============================ SEND: WebRTC ============================ */
+let sendConn = null;  // { pc, ctl, data:[4], acked:Set, meter, done }
+async function makeOffer() {
+  if (sendConn) { try { sendConn.pc.close(); } catch (e) {} sendConn = null; }
+  const pc = new RTCPeerConnection({ iceServers: CS_ICE_SERVERS });
+  const ctl = pc.createDataChannel('ctl');
+  const data = [0, 1, 2, 3].map((k) => {
+    const ch = pc.createDataChannel('d' + k);
+    ch.binaryType = 'arraybuffer';
+    ch.bufferedAmountLowThreshold = 262144;
+    /* Resume the pump if this channel opens after startSending already ran:
+       pumpChannel bails when the channel is not open yet, and nothing else
+       re-triggers it — without this, a transfer could stall with no recovery
+       (the receiver only sends 'want' on a hash failure, never to prod). */
+    ch.addEventListener('open', () => pumpChannel(k));
+    return ch;
+  });
+  ctl.binaryType = 'arraybuffer';
+  sendConn = { pc, ctl, data, acked: new Set(), wantQueue: [[], [], [], []], pumping: [false, false, false, false], cancelled: false, ticketSent: false };
+  ctl.addEventListener('open', () => onCtlOpen());
+  ctl.addEventListener('message', (e) => onCtlMessage(e.data));
+  pc.addEventListener('connectionstatechange', () => {
+    if (pc.connectionState === 'failed') {
+      setStatus($('sendStatus'), 'Connection failed. The two devices could not reach each other directly (v1 has no relay). Try the same Wi-Fi network.', true);
+    }
+  });
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  setStatus($('sendStatus'), '<span class="spinner"></span>Preparing your pairing code…');
+  await waitIceComplete(pc);
+  const code = await csEncodeCode({
+    v: 2, kind: 'offer', sdp: pc.localDescription.sdp,
+    tid: sendPkg.tid, circle: loadedKey.circle
+  }, loadedKey.key);
+  $('sendOfferCode').value = code;
+  renderQR($('sendOfferQR'), code);
+  setStatus($('sendStatus'), 'Code ready — give it to the receiver, then paste their answer code below.');
+}
+function onCtlOpen() {
+  if (!sendConn || !sendPkg) return;
+  /* Amendment v2: the receiver must first prove it holds the same key file.
+     The sealed ticket is only sent after its hello proof checks out. */
+  setStatus($('sendStatus'), 'Connected — checking the other side has your key file…');
+}
+async function onSenderHello(msg) {
+  const S = sendConn;
+  if (!S || !sendPkg || S.ticketSent) return;
+  const okProof = await csVerifyHelloProof(sendPkg.sessionKey, msg.proof || '');
+  if (!okProof) {
+    setStatus($('sendStatus'), '❌ The other side does not have your key file — the package was not sent.', true);
+    try { S.pc.close(); } catch (e) {}
+    return;
+  }
+  S.ticketSent = true;
+  const blob = await csSealManifest(sendPkg.manifest, sendPkg.sessionKey);
+  S.ctl.send(JSON.stringify({ type: 'ticket', blob }));
+  setStatus($('sendStatus'), 'Key file confirmed — package offer sent. Waiting for the receiver to accept it…');
+}
+function onCtlMessage(raw) {
+  let msg;
+  try { msg = JSON.parse(raw); } catch (e) { return; }
+  const S = sendConn;
+  if (!S) return;
+  if (msg.type === 'hello') {
+    onSenderHello(msg);
+  } else if (msg.type === 'have') {
+    const have = new Set(msg.parts || []);
+    for (const i of have) S.acked.add(i);       // resumed parts count as done
+    startSending();
+  } else if (msg.type === 'done-part') {
+    markPartAcked(msg.i);
+  } else if (msg.type === 'want') {
+    const chIdx = csChannelForPart(msg.i);
+    if (!S.wantQueue[chIdx].includes(msg.i)) S.wantQueue[chIdx].push(msg.i);
+    pumpChannel(chIdx);
+  } else if (msg.type === 'complete') {
+    finishSend(true);
+  } else if (msg.type === 'cancel') {
+    finishSend(false, 'The receiver cancelled.');
+  }
+}
+function markPartAcked(i) {
+  const S = sendConn;
+  if (!S || S.acked.has(i)) return;
+  S.acked.add(i);
+  const part = sendPkg.manifest.parts[i];
+  if (S.meter && part) S.meter.add(part.size);
+  updateSendProgress();
+  if (S.acked.size >= sendPkg.manifest.parts.length) {
+    setStatus($('sendStatus'), 'All parts delivered — waiting for the receiver to finish checking the files…');
+  }
+}
+function updateSendProgress() {
+  const S = sendConn, total = sendPkg.manifest.parts.length;
+  $('sendPartsBig').textContent = S.acked.size + ' / ' + total + ' parts';
+  $('sendBar').value = total ? S.acked.size / total : 0;
+}
+function startSending() {
+  const S = sendConn;
+  if (!S || S.started) return;
+  S.started = true;
+  $('sendProgress').classList.remove('hidden');
+  $('btnSendCancel').classList.remove('hidden');
+  S.meter = makeMeter($('sendPartsBig'), $('sendSpeed'), $('sendBar'));
+  updateSendProgress();
+  setStatus($('sendStatus'), 'Sending…');
+  const total = sendPkg.manifest.parts.length;
+  for (let i = 0; i < total; i++) {
+    if (!S.acked.has(i)) S.wantQueue[csChannelForPart(i)].push(i);
+  }
+  for (let c = 0; c < 4; c++) pumpChannel(c);
+}
+/* One async pump per data channel; parts on a channel go strictly in order. */
+async function pumpChannel(c) {
+  const S = sendConn;
+  if (!S || S.pumping[c]) return;
+  S.pumping[c] = true;
+  try {
+    const ch = S.data[c];
+    while (S.wantQueue[c].length) {
+      if (S.cancelled || ch.readyState !== 'open') return;
+      const i = S.wantQueue[c].shift();
+      if (S.acked.has(i)) continue;
+      const part = sendPkg.manifest.parts[i];
+      const file = sendFiles.get(part.path);
+      const bytes = new Uint8Array(await file.slice(part.offset, part.offset + part.size).arrayBuffer());
+      for (let off = 0; off < bytes.length; off += CS_FRAME_PAYLOAD) {
+        if (S.cancelled || ch.readyState !== 'open') return;
+        if (S.acked.has(i)) break;              // got acked meanwhile (resume edge)
+        while (ch.bufferedAmount > 1048576) {
+          await new Promise((res) => {
+            const done = () => { ch.removeEventListener('bufferedamountlow', done); res(); };
+            ch.addEventListener('bufferedamountlow', done);
+            setTimeout(done, 400);              // safety re-check
+          });
+          if (S.cancelled || ch.readyState !== 'open') return;
+        }
+        ch.send(csEncodeFrame(i, bytes.subarray(off, off + CS_FRAME_PAYLOAD)));
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    if (sendConn === S) S.pumping[c] = false;
+  }
+}
+function finishSend(ok, why) {
+  const S = sendConn;
+  if (S && S.meter) S.meter.stop();
+  if (ok) setStatus($('sendStatus'), '✅ Done — the receiver has the complete package, fully checked.');
+  else setStatus($('sendStatus'), why || 'Send ended.', !ok);
+  $('btnSendCancel').classList.add('hidden');
+}
+$('btnConnect').addEventListener('click', async () => {
+  try {
+    if (!sendConn) throw new Error('Pack files first (Step 1).');
+    if (!loadedKey) throw new Error('Load your key file first.');
+    const ans = await csDecodeCode($('sendAnswerCode').value, loadedKey.key);
+    if (ans.kind !== 'answer') throw new Error('That is not an answer code.');
+    await sendConn.pc.setRemoteDescription({ type: 'answer', sdp: ans.sdp });
+    setStatus($('sendStatus'), '<span class="spinner"></span>Connecting…');
+  } catch (e) {
+    setStatus($('sendStatus'), 'Could not use that answer code: ' + esc(e.message || String(e)), true);
+  }
+});
+$('btnCopyOffer').addEventListener('click', (e) => copyText($('sendOfferCode'), e.target));
+$('btnSendCancel').addEventListener('click', () => {
+  const S = sendConn;
+  if (!S) return;
+  S.cancelled = true;
+  try { S.ctl.send(JSON.stringify({ type: 'cancel' })); } catch (e) {}
+  try { S.pc.close(); } catch (e) {}
+  finishSend(false, 'You cancelled the send.');
+});
+</script>
+
+<script>
+'use strict';
+/* ============================ RECEIVE ============================ */
+/* packages: Map tid -> pkg. A package is NEVER merged with another tid. */
+const packages = new Map();
+let recvConn = null;  // { pc, ctl, sessionKey, tid, cancelled }
+
+function packageListEl() { return $('packageList'); }
+function ensurePkgEntry(pkg) {
+  const empty = $('noPackages');
+  if (empty) empty.remove();
+  if (pkg.li) return;
+  const li = document.createElement('li');
+  li.innerHTML =
+    '<div style="font-size:26px;font-weight:700;">' + esc(pkg.name || 'Package') + '</div>' +
+    '<div class="tid">' + esc(pkg.tid) + '</div>' +
+    '<div>State: <span class="state mid">receiving…</span></div>' +
+    '<div class="mid pkgProgress"></div>' +
+    '<div class="pkgFiles"></div>';
+  pkg.li = li;
+  pkg.stateEl = li.querySelector('.state');
+  pkg.progressEl = li.querySelector('.pkgProgress');
+  pkg.filesEl = li.querySelector('.pkgFiles');
+  packageListEl().appendChild(li);
+}
+function setPkgState(pkg, text, cls) {
+  ensurePkgEntry(pkg);
+  pkg.stateEl.textContent = text;
+  pkg.stateEl.className = 'state ' + cls;
+}
+function updatePkgProgress(pkg) {
+  ensurePkgEntry(pkg);
+  const total = pkg.manifest ? pkg.manifest.parts.length : 0;
+  pkg.progressEl.textContent = pkg.verified.size + ' / ' + total + ' parts checked';
+  if (recvConn && recvConn.tid === pkg.tid) {
+    $('recvPartsBig').textContent = pkg.verified.size + ' / ' + total + ' parts';
+    $('recvBar').value = total ? pkg.verified.size / total : 0;
+  }
+}
+
+/* ---------- storage backends (OPFS preferred, memory fallback) ---------- */
+async function makeStore(pkg) {
+  if (navigator.storage && navigator.storage.getDirectory) {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle('chunksend-' + pkg.tid, { create: true });
+      return { kind: 'opfs', dir, handles: new Map() };
+    } catch (e) { /* fall through to memory */ }
+  }
+  return { kind: 'memory', files: new Map() };  // path -> Map(partIdx -> Uint8Array)
+}
+async function storePart(pkg, fileIdx, part, bytes) {
+  const st = pkg.store;
+  if (st.kind === 'opfs') {
+    const name = 'f' + fileIdx;
+    let fh = st.handles.get(name);
+    if (!fh) { fh = await st.dir.getFileHandle(name, { create: true }); st.handles.set(name, fh); }
+    const w = await fh.createWritable({ keepExistingData: true });
+    await w.seek(part.offset);
+    await w.write(bytes);
+    await w.close();
+  } else {
+    let m = st.files.get(part.path);
+    if (!m) { m = new Map(); st.files.set(part.path, m); }
+    m.set(part.i, bytes);
+  }
+}
+async function readWholeFile(pkg, fileIdx, fileMeta) {
+  const st = pkg.store;
+  if (st.kind === 'opfs') {
+    let fh = st.handles.get('f' + fileIdx);
+    if (!fh) {
+      try { fh = await st.dir.getFileHandle('f' + fileIdx, { create: false }); }
+      catch (e) {
+        /* A zero-byte file has no parts, so it never got a stored file —
+           it still verifies as an empty file rather than failing the check. */
+        if (fileMeta.size === 0) return new Uint8Array(0);
+        throw e;
+      }
+    }
+    const f = await fh.getFile();
+    return new Uint8Array(await f.arrayBuffer());
+  }
+  const m = pkg.store.files.get(fileMeta.path) || new Map();
+  const out = new Uint8Array(fileMeta.size);
+  for (const part of pkg.manifest.parts) {
+    if (part.path !== fileMeta.path) continue;
+    const b = m.get(part.i);
+    if (b) out.set(b, part.offset);
+  }
+  return out;
+}
+async function saveVerifiedMeta(pkg) {
+  if (pkg.store.kind !== 'opfs') return;
+  try {
+    const fh = await pkg.store.dir.getFileHandle('cs-meta.json', { create: true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify({ tid: pkg.tid, verified: [...pkg.verified] }));
+    await w.close();
+  } catch (e) { /* resume metadata is best-effort */ }
+}
+async function loadVerifiedMeta(pkg) {
+  if (pkg.store.kind !== 'opfs') return [];
+  try {
+    const fh = await pkg.store.dir.getFileHandle('cs-meta.json', { create: false });
+    const f = await fh.getFile();
+    const meta = JSON.parse(await f.text());
+    return Array.isArray(meta.verified) ? meta.verified : [];
+  } catch (e) { return []; }
+}
+
+/* ---------- receiver connection ---------- */
+$('btnMakeAnswer').addEventListener('click', async () => {
+  try {
+    /* Section 13: the key file must be loaded BEFORE the code can even be
+       opened — a sealed code yields nothing without it. */
+    if (!loadedKey) throw new Error('Load your key file first.');
+    const offer = await csDecodeCode($('recvOfferCode').value, loadedKey.key);
+    if (offer.kind !== 'offer') throw new Error('That is not a sender code.');
+    if (!offer.tid || !offer.circle) throw new Error('That sender code is incomplete.');
+    if (offer.circle !== loadedKey.circle) {
+      throw new Error('Wrong key file — this package belongs to a different circle ' +
+        '(the sender used circle ' + offer.circle + ', your key file is circle ' +
+        loadedKey.circle + '). Nothing was accepted.');
+    }
+    /* Section 13: stale codes are dead codes — check the tid stamp. */
+    const expiryError = csOfferExpiryError(offer.tid, Date.now());
+    if (expiryError) throw new Error(expiryError);
+    if (recvConn) { try { recvConn.pc.close(); } catch (e) {} }
+    const pc = new RTCPeerConnection({ iceServers: CS_ICE_SERVERS });
+    /* Amendment v2: same master key + same tid ⇒ same session key. With the
+       wrong key file this derivation yields a different key and the hello
+       proof / seal would fail on the sender's side too. */
+    const sessionKey = await csDeriveSessionKey(loadedKey.key, offer.tid);
+    recvConn = {
+      pc, ctl: null, sessionKey, tid: offer.tid, cancelled: false
+    };
+    pc.addEventListener('datachannel', (ev) => {
+      const ch = ev.channel;
+      ch.binaryType = 'arraybuffer';
+      if (ch.label === 'ctl') {
+        recvConn.ctl = ch;
+        ch.addEventListener('open', async () => {
+          /* Amendment v2: the receiver speaks first — prove we hold the same
+             key file before the sender releases the sealed ticket. */
+          try {
+            const proof = await csHelloProof(recvConn.sessionKey);
+            ch.send(JSON.stringify({ type: 'hello', proof }));
+          } catch (e) { console.error(e); }
+        });
+        ch.addEventListener('message', (e) => onRecvCtl(e.data));
+      } else {
+        ch.addEventListener('message', (e) => onRecvFrame(e.data));
+      }
+    });
+    pc.addEventListener('connectionstatechange', () => {
+      if (pc.connectionState === 'failed') {
+        setStatus($('recvStatus'), 'Connection failed. The two devices could not reach each other directly (v1 has no relay). Try the same Wi-Fi network.', true);
+      }
+    });
+    await pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    setStatus($('recvStatus'), '<span class="spinner"></span>Preparing your answer code…');
+    await waitIceComplete(pc);
+    const code = await csEncodeCode({ v: 2, kind: 'answer', sdp: pc.localDescription.sdp }, loadedKey.key);
+    $('recvAnswerCode').value = code;
+    renderQR($('recvAnswerQR'), code);
+    $('recvCodeBox').classList.remove('hidden');
+    setStatus($('recvStatus'), 'Answer code ready — give it back to the sender, then wait here for the files.');
+  } catch (e) {
+    console.error(e);
+    const m = e.message || String(e);
+    setStatus($('recvStatus'),
+      (m.indexOf('Wrong key file') === 0 || m.indexOf('That offer code has expired') === 0)
+        ? esc(m) : 'Could not use that code: ' + esc(m), true);
+  }
+});
+$('btnCopyAnswer').addEventListener('click', (e) => copyText($('recvAnswerCode'), e.target));
+
+async function onRecvCtl(raw) {
+  let msg;
+  try { msg = JSON.parse(raw); } catch (e) { return; }
+  const R = recvConn;
+  if (!R) return;
+  if (msg.type === 'ticket') {
+    let manifest;
+    try {
+      manifest = await csUnsealManifest(msg.blob, R.sessionKey, R.tid);
+    } catch (e) {
+      /* FAIL LOUD AND CLOSED: a bad seal means this package cannot be trusted. */
+      const bad = { tid: R.tid, name: 'Untrusted package', verified: new Set(), manifest: null, state: 'failed' };
+      packages.set(R.tid, bad);
+      setPkgState(bad, '❌ REJECTED — the seal on this package failed. It may have been tampered with, so nothing from it was accepted.', 'bad');
+      bad.progressEl.textContent = '';
+      setStatus($('recvStatus'), '❌ REJECTED: the package seal failed (' + esc(e.message) + '). Nothing was accepted from it.', true);
+      try { R.pc.close(); } catch (err) {}
+      return;
+    }
+    let pkg = packages.get(R.tid);
+    if (!pkg || pkg.state === 'complete' || pkg.state === 'failed' || pkg.state === 'cancelled') {
+      /* A terminal package starts over in 'receiving' state — otherwise the
+         frame guard (state !== 'receiving') would drop every frame of the
+         resumed transfer forever, and the UI would sit on "receiving…"
+         with no way forward. Cancel-then-resume is a promised flow ("kept
+         under the package ID if you want to resume later"), and a failed
+         package must be retryable the same way. The previous store is
+         kept, so on-disk parts survive the restart, and the list entry is
+         reused instead of leaving a stale duplicate behind. */
+      const prevState = pkg ? pkg.state : null;
+      const prevPkg = pkg;
+      if (prevPkg && prevPkg.meter) prevPkg.meter.stop();
+      pkg = {
+        tid: R.tid, name: manifest.name, manifest, state: 'receiving',
+        verified: new Set(), buffers: new Map(), writeChain: Promise.resolve(),
+        fileIdxByPath: new Map(manifest.files.map((f, k) => [f.path, k])),
+        meter: null, li: null
+      };
+      if (prevPkg && prevPkg.li) {
+        pkg.li = prevPkg.li; pkg.stateEl = prevPkg.stateEl;
+        pkg.progressEl = prevPkg.progressEl; pkg.filesEl = prevPkg.filesEl;
+      }
+      packages.set(R.tid, pkg);
+      pkg.store = (prevPkg && prevPkg.store) || await makeStore(pkg);
+      /* A failed package's stored bytes are suspect (its whole-file check
+         already failed once), so it is re-fetched in full instead of
+         trusting the old verified list — every part is re-checked on the
+         way back in. Other states resume from the stored verified list. */
+      if (prevState !== 'failed') {
+        const prior = await loadVerifiedMeta(pkg);
+        for (const i of prior) {
+          if (manifest.parts[i] && manifest.parts[i].i === i) pkg.verified.add(i);
+        }
+      }
+      setPkgState(pkg, 'receiving…', 'mid');
+    }
+    R.pkg = pkg;
+    $('recvProgress').classList.remove('hidden');
+    $('btnRecvCancel').classList.remove('hidden');
+    if (!pkg.meter) pkg.meter = makeMeter($('recvPartsBig'), $('recvSpeed'), $('recvBar'));
+    updatePkgProgress(pkg);
+    setStatus($('recvStatus'),
+      'Receiving <b>' + esc(manifest.name) + '</b> · ' + fmtSize(manifest.totalSize) +
+      ' · package <span class="tid">' + esc(R.tid) + '</span>' +
+      (pkg.store.kind === 'memory' ? '<br><small>Saving in memory only (this browser has no on-disk store) — keep this tab open and download the files when done.</small>' : ''));
+    R.ctl.send(JSON.stringify({ type: 'have', parts: [...pkg.verified] }));
+    /* If every part is already verified, no frame will ever arrive to
+       trigger the final check — a package of only empty files (zero
+       parts), a resume that restored all parts from storage, or a
+       re-received completed package. Check now, or both sides wait
+       forever (the sender only finishes on 'complete'). */
+    if (pkg.verified.size === pkg.manifest.parts.length) await verifyWholePackage(pkg);
+  } else if (msg.type === 'cancel') {
+    const pkg = R.pkg;
+    if (pkg && pkg.state === 'receiving') {
+      pkg.state = 'cancelled';
+      setPkgState(pkg, 'cancelled by the sender', 'bad');
+      if (pkg.meter) pkg.meter.stop();
+    }
+    setStatus($('recvStatus'), 'The sender cancelled this transfer.', true);
+  }
+}
+
+function onRecvFrame(buf) {
+  const R = recvConn;
+  if (!R || !R.pkg) return;
+  const pkg = R.pkg;
+  if (pkg.state !== 'receiving') return;
+  let frame;
+  try { frame = csDecodeFrame(buf); } catch (e) { return; }
+  const part = pkg.manifest.parts[frame.i];
+  if (!part) return;
+  if (pkg.verified.has(frame.i)) return;
+  let acc = pkg.buffers.get(frame.i);
+  if (!acc) { acc = { chunks: [], got: 0 }; pkg.buffers.set(frame.i, acc); }
+  if (acc.got >= part.size) return;
+  acc.chunks.push(frame.payload.slice());   // copy — the wire buffer is reused
+  acc.got += frame.payload.length;
+  if (acc.got < part.size) return;
+  /* Part fully arrived: check its fingerprint BEFORE accepting anything. */
+  const bytes = new Uint8Array(part.size);
+  let o = 0;
+  for (const c of acc.chunks) { bytes.set(c.subarray(0, part.size - o), o); o += Math.min(c.length, part.size - o); }
+  pkg.buffers.delete(frame.i);
+  csSha256Hex(bytes).then(async (hex) => {
+    if (hex !== part.sha256) {
+      /* Altered or corrupted part: throw it away and ask for it again. */
+      R.ctl.send(JSON.stringify({ type: 'want', i: frame.i }));
+      return;
+    }
+    pkg.writeChain = pkg.writeChain.then(async () => {
+      await storePart(pkg, pkg.fileIdxByPath.get(part.path), part, bytes);
+      pkg.verified.add(frame.i);
+      await saveVerifiedMeta(pkg);
+      if (pkg.meter) pkg.meter.add(part.size);
+      updatePkgProgress(pkg);
+      R.ctl.send(JSON.stringify({ type: 'done-part', i: frame.i }));
+      if (pkg.verified.size === pkg.manifest.parts.length) await verifyWholePackage(pkg);
+    });
+    await pkg.writeChain;
+  }).catch((e) => console.error(e));
+}
+
+async function verifyWholePackage(pkg) {
+  const R = recvConn;
+  try {
+    for (let k = 0; k < pkg.manifest.files.length; k++) {
+      const fm = pkg.manifest.files[k];
+      const bytes = await readWholeFile(pkg, k, fm);
+      if (bytes.length !== fm.size) throw new Error('size mismatch on ' + fm.path);
+      const hex = await csSha256Hex(bytes);
+      if (hex !== fm.sha256) throw new Error('file check failed on ' + fm.path);
+    }
+    pkg.state = 'complete';
+    setPkgState(pkg, '✅ complete — every file checked', 'ok');
+    if (pkg.meter) pkg.meter.stop();
+    setStatus($('recvStatus'), '✅ Complete: <b>' + esc(pkg.name) + '</b> — every file passed its check. Download the files below.');
+    renderDownloads(pkg);
+    if (R && R.ctl && R.ctl.readyState === 'open') {
+      R.ctl.send(JSON.stringify({ type: 'complete' }));
+    }
+    $('btnRecvCancel').classList.add('hidden');
+  } catch (e) {
+    pkg.state = 'failed';
+    setPkgState(pkg, '❌ failed final check (' + esc(e.message) + ')', 'bad');
+    setStatus($('recvStatus'), 'The package failed its final check: ' + esc(e.message), true);
+  }
+}
+
+function renderDownloads(pkg) {
+  ensurePkgEntry(pkg);
+  pkg.filesEl.innerHTML = '';
+  pkg.manifest.files.forEach((fm, k) => {
+    const btn = document.createElement('button');
+    btn.className = 'dl';
+    btn.textContent = '⬇ ' + fm.path.split('/').pop() + ' (' + fmtSize(fm.size) + ')';
+    btn.title = fm.path;
+    btn.addEventListener('click', async () => {
+      const bytes = await readWholeFile(pkg, k, fm);
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fm.path.split('/').pop();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    });
+    pkg.filesEl.appendChild(btn);
+  });
+}
+
+$('btnRecvCancel').addEventListener('click', () => {
+  const R = recvConn;
+  if (!R) return;
+  R.cancelled = true;
+  if (R.ctl && R.ctl.readyState === 'open') {
+    try { R.ctl.send(JSON.stringify({ type: 'cancel' })); } catch (e) {}
+  }
+  if (R.pkg && R.pkg.state === 'receiving') {
+    R.pkg.state = 'cancelled';
+    setPkgState(R.pkg, 'cancelled by you', 'bad');
+    if (R.pkg.meter) R.pkg.meter.stop();
+  }
+  try { R.pc.close(); } catch (e) {}
+  setStatus($('recvStatus'), 'You cancelled this receive. Parts already checked are kept under the package ID if you want to resume later.', true);
+  $('btnRecvCancel').classList.add('hidden');
+});
+</script>
+</body>
+</html>
